@@ -109,7 +109,7 @@ func main() {
 	}
 
 	githubToken := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
+	if githubToken == "" {
 		log.Fatal("$GITHUB_TOKEN must be set")
 	}
 
