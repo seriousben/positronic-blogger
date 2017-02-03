@@ -90,6 +90,7 @@ func NewsCreate(w http.ResponseWriter, r *http.Request) {
 	if token := os.Getenv("ACCESS_TOKEN"); token != entry.Token {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(http.StatusForbidden)
+		log.Println("Wrong access token")
 		return
 	}
 	log.Println(entry.Title)
