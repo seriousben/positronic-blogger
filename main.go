@@ -22,6 +22,7 @@ type NewsEntry struct {
 	Title   string `json:title`
 	Url     string `json:url`
 	Comment string `json:comment`
+	Token   string `json:token`
 	Date    string
 }
 
@@ -86,6 +87,11 @@ func NewsCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if token := os.Getenv("ACCESS_TOKEN"); token != entry.Token {
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 	log.Println(entry.Title)
 	w.WriteHeader(http.StatusOK)
 	NewPost(entry)
@@ -98,9 +104,17 @@ func main() {
 		log.Fatal("$PORT must be set")
 	}
 
-	token := os.Getenv("GITHUB_TOKEN")
+	if token := os.Getenv("ACCESS_TOKEN"); token == "" {
+		log.Fatal("$ACCESS_TOKEN must be set")
+	}
+
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		log.Fatal("$GITHUB_TOKEN must be set")
+	}
+
 	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
+		&oauth2.Token{AccessToken: githubToken},
 	)
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 
