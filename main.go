@@ -98,10 +98,8 @@ func NewsCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	err := gotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading environment variables")
-	}
+	gotenv.Load()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		log.Fatal("$PORT must be set")
