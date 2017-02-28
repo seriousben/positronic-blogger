@@ -59,7 +59,7 @@ func NewPost(e NewsEntry) {
 		Committer: &github.CommitAuthor{Name: ToStringPtr("Benjamin Boudreau"), Email: ToStringPtr("boudreau.benjamin@gmail.com")},
 	}
 	_, _, err = client.Repositories.CreateFile(
-		"seriousben", "seriousben.com", "content/short/"+fileName,
+		"seriousben", "seriousben.com", "content/nano/"+fileName,
 		&opts)
 
 	if err != nil {
