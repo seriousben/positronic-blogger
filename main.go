@@ -67,7 +67,6 @@ func NewPost(e NewsEntry) {
 	}
 }
 
-// Routes
 func NewsCreate(w http.ResponseWriter, r *http.Request) {
 	var entry NewsEntry
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1048576))
@@ -99,7 +98,10 @@ func NewsCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	gotenv.Load()
+	err := gotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading environment variables")
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		log.Fatal("$PORT must be set")
