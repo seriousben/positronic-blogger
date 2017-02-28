@@ -45,7 +45,7 @@ func NewPost(e NewsEntry) {
 	fileName := slug.Make(e.Title) + ".md"
 	commit := "auto: new short post " + fileName
 
-	e.Date = time.Now().UTC().Format("2017-01-31T18:32:38-05:00")
+	e.Date = time.Now().UTC().Format(time.RFC3339)
 
 	buf := new(bytes.Buffer)
 	err = tmpl.Execute(buf, e)
