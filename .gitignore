@@ -25,4 +25,5 @@ _testmain.go
 
 .env
 newsblur-to-hugo
+main
 vendor/*/

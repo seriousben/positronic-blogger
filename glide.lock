@@ -1,0 +1,16 @@
+hash: 1adaa14617bd42baeaf806262e4dc9bdf3ce08c9f39acb88e846516c8bc07ff5
+updated: 2017-04-14T19:49:38.293463527-04:00
+imports:
+- name: github.com/google/go-github
+  version: de33c46a823d3f723514fc5333b75ef2e937b7df
+  subpackages:
+  - github
+- name: github.com/gosimple/slug
+  version: 32efb997950eba210b1880d8cf52b601c1b5abe3
+- name: github.com/pkg/errors
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+- name: golang.org/x/net
+  version: 5602c733f70afc6dcec6766be0d5034d4c4f14de
+  subpackages:
+  - publicsuffix
+testImports: []

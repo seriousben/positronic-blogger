@@ -1,11 +1,10 @@
 +++
 date = "{{.Date}}"
-title = "{{.Title}}"
-originalUrl = "{{.Url}}"
-comment = "{{.Comment}}"
+title = {{.Title | quote}}
+originalUrl = {{.Url | quote}}
+comment = {{.Comment | quote}}
 +++
 
 ### About {{.Url}}:
 
 {{.Comment}}
-

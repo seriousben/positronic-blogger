@@ -1,1 +1,0 @@
-web: newsblur-to-hugo
