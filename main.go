@@ -193,12 +193,11 @@ func Blog(githubClient *github.Client, post *BlogPost) error {
 }
 
 type NewsblurAPI struct {
-	username string
-	password string
-	client   *http.Client
+	client    *http.Client
+	loginInfo *NewsblurLogin
 }
 
-func NewNewsblurAPI(username string, password string) (*NewsblurAPI, error) {
+func NewNewsblurAPI() (*NewsblurAPI, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return &NewsblurAPI{}, errors.Wrap(err, "Creating cookiejar")
@@ -209,13 +208,13 @@ func NewNewsblurAPI(username string, password string) (*NewsblurAPI, error) {
 		Jar: jar,
 	}
 
-	return &NewsblurAPI{username, password, client}, nil
+	return &NewsblurAPI{client: client}, nil
 }
 
-func (api *NewsblurAPI) Login() (*NewsblurLogin, error) {
+func (api *NewsblurAPI) Login(username string, password string) (*NewsblurLogin, error) {
 	values := url.Values{}
-	values.Set("username", api.username)
-	values.Set("password", api.password)
+	values.Set("username", username)
+	values.Set("password", password)
 
 	loginURL := "https://newsblur.com/api/login"
 
@@ -234,6 +233,8 @@ func (api *NewsblurAPI) Login() (*NewsblurLogin, error) {
 	if err := json.Unmarshal(data, &login); err != nil {
 		return &NewsblurLogin{}, errors.Wrap(err, "Unmarshaling login response body")
 	}
+
+	api.loginInfo = &login
 
 	return &login, nil
 }
@@ -264,17 +265,13 @@ func (api *NewsblurAPI) GetSharedStories(userID json.Number, pageNum int) (*[]Ne
 }
 
 func (api *NewsblurAPI) IterStories(checkpoint *time.Time) (<-chan *NewsblurStory, error) {
-	login, err := api.Login()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error on login")
-	}
 	ch := make(chan *NewsblurStory)
 
 	go func() {
 		defer close(ch)
 		pageNum := 1
 		for true {
-			stories, err := api.GetSharedStories(login.UserID, pageNum)
+			stories, err := api.GetSharedStories(api.loginInfo.UserID, pageNum)
 			if err != nil {
 				// TODO: Send error down somehow
 				if err != nil {
@@ -319,7 +316,7 @@ func NewGithubClient(githubToken string) (*github.Client, error) {
 	return github.NewClient(tc), nil
 }
 
-func SyncSharedStoriesWithPosts(githubClient *github.Client, newsblurAPI *NewsblurAPI) {
+func SyncSharedStoriesWithPosts(githubClient *github.Client, newsblurAPI *NewsblurAPI) int {
 	checkpoint, err := GetCheckpoint(githubClient)
 	if err != nil {
 		log.Fatal(err)
@@ -329,15 +326,14 @@ func SyncSharedStoriesWithPosts(githubClient *github.Client, newsblurAPI *Newsbl
 	if err != nil {
 		log.Fatal(err)
 	}
-	pageNum := 1
+	storiesNum := 1
 	var newCheckpoint *time.Time
 	for story := range ch {
 		// Sentinel for done
 		if story == nil {
 			break
 		}
-		log.Printf("Creating Story[%d]: %s %d\n", pageNum, story.ID, &story)
-		pageNum += 1
+		log.Printf("Creating Story[%d]: %s %d\n", storiesNum, story.ID, &story)
 		blogPost, err := NewBlogPost(story)
 		if err != nil {
 			log.Println("Error creating blog post", err)
@@ -349,7 +345,8 @@ func SyncSharedStoriesWithPosts(githubClient *github.Client, newsblurAPI *Newsbl
 			log.Println("Error posting blog post", err)
 			break
 		}
-		log.Printf("Created Story[%d] successfully", pageNum-1)
+		log.Printf("Created Story[%d] successfully", storiesNum)
+		storiesNum += 1
 
 		if newCheckpoint == nil {
 			newCheckpoint = &blogPost.Date
@@ -361,9 +358,9 @@ func SyncSharedStoriesWithPosts(githubClient *github.Client, newsblurAPI *Newsbl
 		if err != nil {
 			log.Fatal("Could not persist new checkpoint", err)
 		}
-	} else {
-		log.Print("Nothing to see here, carry on")
 	}
+
+	return storiesNum - 1
 }
 
 func getenv(name string) string {
@@ -384,10 +381,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	newsblurAPI, err := NewNewsblurAPI(newsblurUsername, newsblurPassword)
+	newsblurAPI, err := NewNewsblurAPI()
 	if err != nil {
 		log.Fatal(err)
 	}
+	_, err = newsblurAPI.Login(newsblurUsername, newsblurPassword)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Error on login"))
+	}
 
-	SyncSharedStoriesWithPosts(githubClient, newsblurAPI)
+	for true {
+		num := SyncSharedStoriesWithPosts(githubClient, newsblurAPI)
+		log.Printf("Posted %d stories", num)
+		time.Sleep(2 * time.Hour)
+	}
 }
