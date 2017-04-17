@@ -260,7 +260,7 @@ func (api *NewsblurAPI) GetSharedStories(userID json.Number, pageNum int) (*[]Ne
 	if err := json.Unmarshal(storiesData, &storiesResponse); err != nil {
 		return &[]NewsblurStory{}, errors.Wrap(err, "Unmarshaling stories response body")
 	}
-	//log.Print("> call", storiesResponse.Stories)
+
 	return &storiesResponse.Stories, nil
 }
 
