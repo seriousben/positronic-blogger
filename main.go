@@ -24,7 +24,7 @@ import (
 const NEWSBLUR_TIME_FORMAT = "2006-01-02 15:04:05.999999"
 const BLOG_REPOSITORY_USER = "seriousben"
 const BLOG_REPOSITORY = "seriousben.com"
-const BLOG_POST_PATH = "content/nano/"
+const BLOG_POST_PATH = "content/tldr/"
 
 const API_REQUEST_RATE = 720 * time.Millisecond
 

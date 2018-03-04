@@ -1,10 +1,13 @@
 +++
 date = "{{.Date}}"
+publishDate = "{{.Date}}"
 title = {{.Title | quote}}
 originalUrl = {{.Url | quote}}
 comment = {{.Comment | quote}}
 +++
 
-### About {{.Url}}:
+### TLDR
 
 {{.Comment}}
+
+[Read more]({{.Url}})
