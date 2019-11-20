@@ -1,0 +1,22 @@
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: newsblur-to-hugo
+  labels:
+    app: newsblur-to-hugo
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: newsblur-to-hugo
+  template:
+    metadata:
+      labels:
+        app: newsblur-to-hugo
+    spec:
+      containers:
+      - name: worker
+        image: seriousben/newsblur-to-hugo:latest
+---

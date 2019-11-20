@@ -11,3 +11,15 @@ jobs:
         # uses docker://reviewdog/action-golangci-lint:v1 # pre-build docker image
         with:
           github_token: ${{ secrets.github_token }}
+
+  kubectl-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Ensure manifest generation
+        uses: stefanprodan/kube-tools@v1
+        with:
+          kustomize: 3.2.1
+          command: |
+            kustomize build deploy/overlay > build-kustomized-overlay.yaml
+            diff -u build-kustomized-overlay.yaml deploy/manifests/kustomized-overlay.yaml

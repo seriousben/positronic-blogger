@@ -1,0 +1,6 @@
+commonLabels:
+  env: prod
+commonAnnotations:
+  seriousben.com/repo: "https://github.com/seriousben/seriousben.com"
+resources:
+- ../base
