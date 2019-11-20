@@ -18,8 +18,8 @@ spec:
     spec:
       containers:
       - name: worker
-        image: seriousben/newsblur-to-hugo:latest
-        command: ['poll']
+        image: seriousben/newsblur-to-hugo:32b7e92444b60a2bbb055f087584f6758f7a5de5
+        args: ['poll']
         env:
         - name: NEWSBLUR_USERNAME
           valueFrom:

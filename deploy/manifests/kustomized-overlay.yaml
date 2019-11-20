@@ -41,5 +41,23 @@ spec:
         env: prod
     spec:
       containers:
-      - image: seriousben/newsblur-to-hugo:latest
+      - args:
+        - poll
+        env:
+        - name: NEWSBLUR_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: username
+              name: newsblur
+        - name: NEWSBLUR_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: newsblur
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: token
+              name: github
+        image: seriousben/newsblur-to-hugo:32b7e92444b60a2bbb055f087584f6758f7a5de5
         name: worker
