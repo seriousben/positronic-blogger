@@ -8,3 +8,4 @@ commonAnnotations:
 resources:
 - deployment.yaml
 - namespace.yaml
+- role.yaml
