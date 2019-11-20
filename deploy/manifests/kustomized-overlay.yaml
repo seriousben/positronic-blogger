@@ -38,11 +38,11 @@ rules:
   - get
   - list
   - watch
+  - update
+  - patch
 - apiGroups:
   - batch
   - extensions
-  - update
-  - patch
   resources:
   - jobs
   verbs:

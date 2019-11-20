@@ -9,8 +9,8 @@ rules:
   verbs: ["get", "watch", "list"]
 - apiGroups: ["extensions", "apps"]
   resources: ["deployments"]
-  verbs: ["get", "list", "watch"]
-- apiGroups: ["batch", "extensions", "update", "patch"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["batch", "extensions"]
   resources: ["jobs"]
   verbs: ["get", "list", "watch", "update", "patch"]
 - apiGroups: [""]
@@ -23,7 +23,7 @@ metadata:
   name: continuous-deployment
 subjects:
 - kind: User
-  name: newsblur-to-hugo-deployer@projects-seriousben.iam.gserviceaccount.com 
+  name: newsblur-to-hugo-deployer@projects-seriousben.iam.gserviceaccount.com
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: Role
