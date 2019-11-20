@@ -51,4 +51,4 @@ jobs:
     - name: Deploy
       run: |
         gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $GKE_PROJECT
-        kubectl set image deployment/newsblur-to-hugo blog=seriousben/newsblur-to-hugo:$GITHUB_SHA -n=newsblur-to-hugo
+        kubectl set image deployment/newsblur-to-hugo worker=seriousben/newsblur-to-hugo:$GITHUB_SHA -n=newsblur-to-hugo
