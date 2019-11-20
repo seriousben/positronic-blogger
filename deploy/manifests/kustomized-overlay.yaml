@@ -41,6 +41,8 @@ rules:
 - apiGroups:
   - batch
   - extensions
+  - update
+  - patch
   resources:
   - jobs
   verbs:
