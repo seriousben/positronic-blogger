@@ -18,7 +18,7 @@ import (
 
 const BLOG_REPOSITORY_USER = "seriousben"
 const BLOG_REPOSITORY = "seriousben.com"
-const BLOG_POST_PATH = "content/tldr/"
+const BLOG_POST_PATH = "content/links/"
 
 const API_REQUEST_RATE = 720 * time.Millisecond
 
