@@ -27,3 +27,4 @@ _testmain.go
 newsblur-to-hugo
 main
 vendor/*/
+dist

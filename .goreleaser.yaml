@@ -1,0 +1,11 @@
+builds:
+  - main: ./
+    id: "cli"
+    binary: nbtohugo
+    goos:
+      - linux
+      - darwin
+      - windows
+    env:
+      - CGO_ENABLED=0
+
