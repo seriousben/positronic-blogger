@@ -3,27 +3,22 @@ name: "CI"
 on:
   push:
     branches:
-      - $default-branch
-    tags:
-      - '*'
+      - main
   pull_request:
 
 permissions:
   contents: write
 
-
-
 jobs:
   checks:
     name: "Checks"
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     steps:
     - uses: actions/checkout@v2
     - uses: WillAbides/setup-go-faster@v1.7.0
       with:
         go-version: "*"
-    - run: "go test ./..."
+    - run: "go test -coverprofile=coverage.out -covermode=count ./..."
     - run: "go vet ./..."
     - uses: dominikh/staticcheck-action@v1.1.0
       with:
@@ -35,25 +30,8 @@ jobs:
         distribution: goreleaser
         version: latest
         args: build --snapshot --single-target
-
-  releaser:
-    name: "Releaser"
-    runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
-    steps:
-    - uses: actions/checkout@v2
+    - name: Patch Coverage
+      if: github.event_name == 'pull_request'
+      uses: seriousben/go-patch-cover-action@first-version
       with:
-        fetch-depth: 0
-    - uses: WillAbides/setup-go-faster@v1.7.0
-      with:
-        go-version: '*'
-    - name: Install goreleaser
-      uses: goreleaser/goreleaser-action@v2
-      with:
-        distribution: goreleaser
-        version: latest
-        install-only: true
-    - name: Release
-      run: goreleaser release --rm-dist
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        version: main

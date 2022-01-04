@@ -12,4 +12,5 @@ require (
 	golang.org/x/net v0.0.0-20191118183410-d06c31c94cae
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	google.golang.org/appengine v1.6.5 // indirect
+	gotest.tools/v3 v3.0.3
 )
