@@ -87,7 +87,9 @@ pollLoop:
 	for {
 		log.Printf("Syncing")
 		num := SyncSharedStoriesWithPosts(ctx, githubClient, newsblurClient, args.dryRun)
+
 		log.Printf("Posted %d stories", num)
+
 		select {
 		case <-time.After(2 * time.Hour):
 		case <-ctx.Done():
