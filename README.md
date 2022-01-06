@@ -6,7 +6,7 @@ newsblur-to-hugo - A tool to share newsblur shared stories in a hugo blog.
 
 ```
 NAME:
-   newsblur-to-hugo - A tool to share newsblur shared stories in a hugo blog.
+   newsblur-to-hugo - Post newsblur shared stories to hugo blogs.
 
 USAGE:
    main [global options] command [command options] [arguments...]
