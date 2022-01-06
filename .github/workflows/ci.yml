@@ -32,8 +32,6 @@ jobs:
         version: latest
         args: build --snapshot --single-target
     - name: Patch Coverage
-      if: github.event_name == 'pull_request'
       uses: seriousben/go-patch-cover-action@first-version
       with:
         version: main
-    - run: echo $GO_PATCH_OUT
