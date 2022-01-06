@@ -1,12 +1,12 @@
 # newsblur-to-hugo
 
-newsblur-to-hugo - A tool to expose newblur shared stories in a hugo blog.
+newsblur-to-hugo - A tool to share newsblur shared stories in a hugo blog.
 
 ## Usage
 
 ```
 NAME:
-   newsblur-to-hugo - A tool to expose newblur shared stories in a hugo blog.
+   newsblur-to-hugo - A tool to share newsblur shared stories in a hugo blog.
 
 USAGE:
    main [global options] command [command options] [arguments...]

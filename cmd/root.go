@@ -9,7 +9,7 @@ import (
 
 var root = &cli.App{
 	Name:  "newsblur-to-hugo",
-	Usage: "A tool to expose newblur shared stories in a hugo blog.",
+	Usage: "A tool to share newsblur shared stories in a hugo blog.",
 }
 
 func Register(c *cli.Command) {
