@@ -1,6 +1,6 @@
 # newsblur-to-hugo
 
-newsblur-to-hugo - A tool to share newsblur shared stories in a hugo blog.
+newsblur-to-hugo - A tool to auto-blog newsblur shared stories.
 
 ## Usage
 
