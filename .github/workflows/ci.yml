@@ -32,6 +32,6 @@ jobs:
         version: latest
         args: build --snapshot --single-target
     - name: Patch Coverage
-      uses: seriousben/go-patch-cover-action@v1.0.0
+      uses: seriousben/go-patch-cover-action@v1.1.0
       with:
         version: main
