@@ -14,7 +14,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-const NEWSBLUR_TIME_FORMAT = "2006-01-02 15:04:05.999999"
+const NewsblurTimeFormat = "2006-01-02 15:04:05.999999"
 
 type LoginResponse struct {
 	Authenticated bool        `json:"authenticated"`
@@ -39,7 +39,7 @@ type Client struct {
 	loginInfo *LoginResponse
 }
 
-func NewClient() (*Client, error) {
+func NewClient(ctx context.Context, username string, password string) (*Client, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return &Client{}, fmt.Errorf("creating cookiejar: %w", err)
@@ -49,10 +49,13 @@ func NewClient() (*Client, error) {
 		Jar: jar,
 	}
 
-	return &Client{client: client}, nil
+	c := &Client{client: client}
+	_, err = c.login(ctx, username, password)
+
+	return c, err
 }
 
-func (api *Client) Login(ctx context.Context, username string, password string) (*LoginResponse, error) {
+func (api *Client) login(ctx context.Context, username string, password string) (*LoginResponse, error) {
 	values := url.Values{}
 	values.Set("username", username)
 	values.Set("password", password)
@@ -106,7 +109,7 @@ func (api *Client) GetSharedStories(ctx context.Context, userID json.Number, pag
 	return storiesResponse.Stories, nil
 }
 
-func (api *Client) IterStories(ctx context.Context, checkpoint *time.Time) <-chan Story {
+func (api *Client) IterSharedStories(ctx context.Context, checkpoint *time.Time) <-chan Story {
 	ch := make(chan Story)
 
 	go func() {
@@ -116,16 +119,14 @@ func (api *Client) IterStories(ctx context.Context, checkpoint *time.Time) <-cha
 			stories, err := api.GetSharedStories(ctx, api.loginInfo.UserID, pageNum)
 			if err != nil {
 				// TODO: Send error down somehow
-				if err != nil {
-					log.Fatal(fmt.Errorf("error getting shared stories: %w", err))
-				}
+				log.Fatal(fmt.Errorf("error getting shared stories: %w", err))
 				return
 			}
 			pageNum++
 
 			for _, story := range stories {
 				// TODO: Make this in unmarshall
-				date, err := time.Parse(NEWSBLUR_TIME_FORMAT, story.SharedDate)
+				date, err := time.Parse(NewsblurTimeFormat, story.SharedDate)
 				// TODO: Send error down somehow
 				if err != nil {
 					log.Fatal(fmt.Errorf("error parsing date of story: %w", err))

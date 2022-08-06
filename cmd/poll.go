@@ -3,9 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/seriousben/newsblur-to-hugo/internal/github"
 	"github.com/seriousben/newsblur-to-hugo/internal/newsblur"
 	"github.com/urfave/cli/v2"
 )
@@ -68,7 +68,7 @@ type pollArgs struct {
 }
 
 func doPollAction(ctx context.Context, args pollArgs) error {
-	githubClient, err := NewGithubClient(ctx, args.githubToken)
+	githubClient, err := github.New(ctx, args.githubToken, "", "")
 	if err != nil {
 		return fmt.Errorf("creating GitHub client: %w", err)
 	}
@@ -81,20 +81,6 @@ func doPollAction(ctx context.Context, args pollArgs) error {
 	_, err = newsblurClient.Login(ctx, args.newsblurUsername, args.newsblurPassword)
 	if err != nil {
 		return fmt.Errorf("error on login: %w", err)
-	}
-
-pollLoop:
-	for {
-		log.Printf("Syncing")
-		num := SyncSharedStoriesWithPosts(ctx, githubClient, newsblurClient, args.dryRun)
-
-		log.Printf("Posted %d stories", num)
-
-		select {
-		case <-time.After(2 * time.Hour):
-		case <-ctx.Done():
-			break pollLoop
-		}
 	}
 
 	return nil

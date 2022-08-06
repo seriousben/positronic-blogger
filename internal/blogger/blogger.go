@@ -1,29 +1,32 @@
-package cmd
+package blogger
 
 import (
 	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/google/go-github/github"
 	"github.com/gosimple/slug"
+	"github.com/seriousben/newsblur-to-hugo/internal/github"
 	"github.com/seriousben/newsblur-to-hugo/internal/newsblur"
-	"golang.org/x/oauth2"
 )
 
-const BLOG_REPOSITORY_USER = "seriousben"
-const BLOG_REPOSITORY = "seriousben.com"
-const BLOG_POST_PATH = "content/links/"
+func Blog() {
+	// 1. Sync newsblur shared stories
+	// 2. Other things: Twitter, github, other apps
+}
 
-const API_REQUEST_RATE = 720 * time.Millisecond
+const blogRepositoryUser = "seriousben"
+const blogRepository = "seriousben.com"
+const blogPostPath = "content/links/"
+
 
 var (
-	apiTicker    = time.NewTicker(API_REQUEST_RATE)
 	postTemplate = `
 +++
 date = "{{.Date}}"
@@ -43,7 +46,7 @@ comment = {{.Comment | quote}}
 
 type BlogPost struct {
 	Title   string
-	Url     string
+	URL     string
 	Comment string
 	Date    time.Time
 }
@@ -54,14 +57,14 @@ type Checkpoint struct {
 }
 
 func NewBlogPost(story newsblur.Story) (BlogPost, error) {
-	date, err := time.Parse(newsblur.NEWSBLUR_TIME_FORMAT, story.SharedDate)
+	date, err := time.Parse(newsblur.NewsblurTimeFormat, story.SharedDate)
 	if err != nil {
 		return BlogPost{}, fmt.Errorf("error parsing date of story: %w", err)
 	}
 
 	return BlogPost{
 		Title:   story.Title,
-		Url:     story.Permalink,
+		URL:     story.Permalink,
 		Comment: story.Comment,
 		Date:    date,
 	}, nil
@@ -82,7 +85,7 @@ func retryFunc(theFunc func() (bool, error)) error {
 
 func GetCheckpoint(ctx context.Context, githubClient *github.Client) (*Checkpoint, error) {
 	<-apiTicker.C
-	fileContent, _, _, err := githubClient.Repositories.GetContents(ctx, BLOG_REPOSITORY_USER, BLOG_REPOSITORY, BLOG_POST_PATH+"checkpoint", nil)
+	fileContent, _, _, err := githubClient.Repositories.GetContents(ctx, blogRepositoryUser, blogRepository, blogPostPath+"checkpoint", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error getting checkpoint: %w", err)
 	}
@@ -92,7 +95,7 @@ func GetCheckpoint(ctx context.Context, githubClient *github.Client) (*Checkpoin
 		return nil, fmt.Errorf("error decoding file content: %w", err)
 	}
 	if content == "" {
-		log.Println("Checkpoint was empty, full resync will happen")
+		log.Println("checkpoint was empty, full resync will happen")
 		return &Checkpoint{
 			SHA:        fileContent.GetSHA(),
 			Checkpoint: nil,
@@ -101,7 +104,7 @@ func GetCheckpoint(ctx context.Context, githubClient *github.Client) (*Checkpoin
 
 	content = strings.Trim(content, "\r\n")
 
-	date, err := time.Parse(newsblur.NEWSBLUR_TIME_FORMAT, content)
+	date, err := time.Parse(newsblur.NewsblurTimeFormat, content)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing checkpoint: %w", err)
 	}
@@ -112,7 +115,7 @@ func GetCheckpoint(ctx context.Context, githubClient *github.Client) (*Checkpoin
 }
 
 func SetCheckpoint(ctx context.Context, githubClient *github.Client, prevCheckpoint *Checkpoint, checkpoint time.Time) error {
-	dateStr := checkpoint.Format(newsblur.NEWSBLUR_TIME_FORMAT)
+	dateStr := checkpoint.Format(newsblur.NewsblurTimeFormat)
 
 	commit := "auto: set checkpoint and deploy"
 	var opts = github.RepositoryContentFileOptions{
@@ -125,7 +128,7 @@ func SetCheckpoint(ctx context.Context, githubClient *github.Client, prevCheckpo
 	// Workaround for 409 status code by github
 	apiCall := func() (bool, error) {
 		<-apiTicker.C
-		_, resp, err := githubClient.Repositories.UpdateFile(ctx, BLOG_REPOSITORY_USER, BLOG_REPOSITORY, BLOG_POST_PATH+"checkpoint", &opts)
+		_, resp, err := githubClient.Repositories.UpdateFile(ctx, blogRepositoryUser, blogRepository, blogPostPath+"checkpoint", &opts)
 
 		if resp.StatusCode == 409 {
 			return true, nil
@@ -171,7 +174,7 @@ func CreateBlogPost(githubClient *github.Client, post BlogPost, dryRun bool) err
 	// Workaround for 409 status code by github
 	apiCall := func() (bool, error) {
 		<-apiTicker.C
-		_, resp, err := githubClient.Repositories.CreateFile(context.TODO(), BLOG_REPOSITORY_USER, BLOG_REPOSITORY, BLOG_POST_PATH+fileName, &opts)
+		_, resp, err := githubClient.Repositories.CreateFile(context.TODO(), blogRepositoryUser, blogRepository, blogPostPath+fileName, &opts)
 
 		if resp.StatusCode == 409 {
 			return true, nil
@@ -189,23 +192,15 @@ func CreateBlogPost(githubClient *github.Client, post BlogPost, dryRun bool) err
 	log.Printf("Created %s (%s)", commit, post.Date)
 	return nil
 }
-func NewGithubClient(ctx context.Context, githubToken string) (*github.Client, error) {
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: githubToken},
-	)
-	tc := oauth2.NewClient(ctx, ts)
 
-	return github.NewClient(tc), nil
-}
-
-func SyncSharedStoriesWithPosts(ctx context.Context, githubClient *github.Client, newsblurAPI *newsblur.Client, dryRun bool) int {
+func syncSharedStoriesWithPosts(ctx context.Context, githubClient *github.Client, newsblurAPI *newsblur.Client, dryRun bool) int {
 	checkpoint, err := GetCheckpoint(ctx, githubClient)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Got checkpoint %s", checkpoint)
 
-	ch := newsblurAPI.IterStories(ctx, checkpoint.Checkpoint)
+	ch := newsblurAPI.IterSharedStories(ctx, checkpoint.Checkpoint)
 
 	storiesNum := 1
 	var newCheckpoint *time.Time
@@ -231,14 +226,15 @@ func SyncSharedStoriesWithPosts(ctx context.Context, githubClient *github.Client
 	}
 
 	if newCheckpoint != nil && (checkpoint.Checkpoint == nil || !checkpoint.Checkpoint.Equal(*newCheckpoint)) {
-		if !dryRun {
+		if dryRun {
+			log.Printf("[DRY-RUN] Saved new checkpoint %s -> %s", checkpoint, newCheckpoint)
+		} else {
 			err = SetCheckpoint(ctx, githubClient, checkpoint, *newCheckpoint)
 			if err != nil {
 				log.Fatal("Could not save new checkpoint", err)
+				return 0
 			}
 			log.Printf("Saved new checkpoint %s -> %s", checkpoint, newCheckpoint)
-		} else {
-			log.Printf("[DRY-RUN] Saved new checkpoint %s -> %s", checkpoint, newCheckpoint)
 		}
 	}
 
