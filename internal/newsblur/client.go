@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
@@ -114,7 +113,7 @@ func (c *Client) login(ctx context.Context, username string, password string) (*
 		return nil, fmt.Errorf("login failure")
 	}
 
-	data, err := ioutil.ReadAll(loginRes.Body)
+	data, err := io.ReadAll(loginRes.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading login response body: %w", err)
 	}
@@ -140,7 +139,7 @@ func (c *Client) GetSharedStories(ctx context.Context, pageNum int) ([]*Story, e
 	}
 	defer resp.Body.Close()
 
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println(string(data))
 		return nil, fmt.Errorf("reading stories response body: %w", err)
