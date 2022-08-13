@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/seriousben/newsblur-to-hugo/internal/github"
-	"github.com/seriousben/newsblur-to-hugo/internal/newsblur"
+	"github.com/seriousben/positronic-blogger/internal/github"
+	"github.com/seriousben/positronic-blogger/internal/newsblur"
 	"gotest.tools/v3/assert"
 )
 

@@ -1,4 +1,4 @@
-module github.com/seriousben/newsblur-to-hugo
+module github.com/seriousben/positronic-blogger
 
 go 1.18
 
