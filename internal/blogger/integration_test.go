@@ -2,10 +2,13 @@ package blogger
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/seriousben/newsblur-to-hugo/internal/github"
 	"github.com/seriousben/newsblur-to-hugo/internal/newsblur"
 	"gotest.tools/v3/assert"
@@ -20,6 +23,7 @@ const (
 
 func Test_Blogger(t *testing.T) {
 	var (
+		uid        = uuid.New().String()
 		nbUsername = os.Getenv(envNewsblurUsername)
 		nbPassword = os.Getenv(envNewsblurPassword)
 		ghToken    = os.Getenv(envGithubToken)
@@ -50,11 +54,16 @@ func Test_Blogger(t *testing.T) {
 	ghClient, err := github.New(ctx, ghToken, ghOwner, ghRepo)
 	assert.NilError(t, err)
 
+	contentPath := fmt.Sprintf("%s/%s", strings.ToLower(t.Name()), uid)
+
 	bl, err := New(Config{
-		GithubClient:           ghClient,
-		NewsblurClient:         nbClient,
-		NewsblurContentPath:    "content/links",
-		NewsblurCheckpointPath: "content/links/checkpoint",
+		GithubClient:              ghClient,
+		NewsblurClient:            nbClient,
+		NewsblurContentPath:       contentPath,
+		NewsblurCheckpointPath:    fmt.Sprintf("%s/checkpoint", contentPath),
+		InitialNewsblurCheckpoint: time.Now().Add(-1 * 3 * 30 * 24 * time.Hour),
+		SkipMerge:                 true,
+		GithubPrefix:              fmt.Sprintf("%s-", uid),
 	})
 	assert.NilError(t, err)
 

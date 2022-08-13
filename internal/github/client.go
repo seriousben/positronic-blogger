@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -127,8 +128,14 @@ func (c *BranchClient) CreateFile(ctx context.Context, commitMsg, path, content 
 		Content:   []byte(content),
 		Committer: &github.CommitAuthor{Name: github.String("Benjamin Boudreau"), Email: github.String("boudreau.benjamin@gmail.com")},
 	}
-	_, _, err := c.client.ghClient.Repositories.CreateFile(context.TODO(), c.client.owner, c.client.repo, path, &opts)
+	_, resp, err := c.client.ghClient.Repositories.CreateFile(ctx, c.client.owner, c.client.repo, path, &opts)
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusConflict {
+			log.Println("conflict on create path", path, err)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			return c.CreateFile(ctx, commitMsg, path, content)
+		}
 		return err
 	}
 
@@ -139,6 +146,8 @@ func (c *BranchClient) UpdateFile(ctx context.Context, commitMsg, path, sha, con
 	// TODO: Manage it as a tree!
 	// https://stackoverflow.com/questions/11801983/how-to-create-a-commit-and-push-into-repo-with-github-api-v3
 
+	<-c.client.apiTicker.C
+
 	var opts = github.RepositoryContentFileOptions{
 		Branch:    &c.branchName,
 		Message:   &commitMsg,
@@ -146,8 +155,14 @@ func (c *BranchClient) UpdateFile(ctx context.Context, commitMsg, path, sha, con
 		Committer: &github.CommitAuthor{Name: github.String("Benjamin Boudreau"), Email: github.String("boudreau.benjamin@gmail.com")},
 		SHA:       &sha,
 	}
-	_, _, err := c.client.ghClient.Repositories.CreateFile(context.TODO(), c.client.owner, c.client.repo, path, &opts)
+	_, resp, err := c.client.ghClient.Repositories.CreateFile(ctx, c.client.owner, c.client.repo, path, &opts)
 	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusConflict {
+			log.Println("conflict on update path", path, err, sha)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			return c.UpdateFile(ctx, commitMsg, path, sha, content)
+		}
 		return err
 	}
 	return nil

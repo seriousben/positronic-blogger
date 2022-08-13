@@ -19,7 +19,13 @@ jobs:
     - uses: WillAbides/setup-go-faster@v1.7.0
       with:
         go-version: "*"
-    - run: "go test -coverprofile=coverage.out -covermode=count ./..."
+    - run: "go test -v -coverprofile=coverage.out -covermode=count ./..."
+      env:
+        POSITRONIC_TEST_GITHUB_REPO: seriousben/positronic-blogger-git-api-playground
+        POSITRONIC_TEST_GITHUB_TOKEN: ${{ secrets.POSITRONIC_TEST_GITHUB_TOKEN }}
+        POSITRONIC_TEST_NEWSBLUR_USERNAME: ${{ secrets.POSITRONIC_TEST_NEWSBLUR_USERNAME }}
+        POSITRONIC_TEST_NEWSBLUR_PASSWORD: ${{ secrets.POSITRONIC_TEST_NEWSBLUR_PASSWORD }}
+
     - run: "go vet ./..."
     - uses: dominikh/staticcheck-action@v1.2.0
       with:

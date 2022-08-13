@@ -68,11 +68,13 @@ func newsblurStoryToBlogPost(story *newsblur.Story) (blogPost, error) {
 }
 
 type Config struct {
-	GithubClient           *github.Client
-	NewsblurClient         *newsblur.Client
-	NewsblurContentPath    string
-	NewsblurCheckpointPath string
-	SkipMerge              bool
+	GithubClient              *github.Client
+	NewsblurClient            *newsblur.Client
+	NewsblurContentPath       string
+	NewsblurCheckpointPath    string
+	InitialNewsblurCheckpoint time.Time
+	SkipMerge                 bool
+	GithubPrefix              string
 }
 
 type Blogger struct {
@@ -89,6 +91,10 @@ func (b *Blogger) Run(ctx context.Context) error {
 	checkpoint, checkpointSHA, err := b.getCheckpoint(ctx)
 	if err != nil {
 		return err
+	}
+
+	if checkpoint.Before(b.InitialNewsblurCheckpoint) {
+		checkpoint = b.InitialNewsblurCheckpoint
 	}
 
 	it, err := b.NewsblurClient.SharedStoriesIterator(ctx, checkpoint)
@@ -121,7 +127,7 @@ func (b *Blogger) Run(ctx context.Context) error {
 
 		// start branch on first new content.
 		if brc == nil {
-			brc, err = b.GithubClient.StartBranch(ctx, fmt.Sprintf("%s-positronic-blogger", checkpoint.Format("2006-01-02T1504")))
+			brc, err = b.GithubClient.StartBranch(ctx, fmt.Sprintf("%s%s-positronic-blogger", b.GithubPrefix, checkpoint.Format("2006-01-02T1504")))
 			if err != nil {
 				return err
 			}
@@ -147,7 +153,7 @@ func (b *Blogger) Run(ctx context.Context) error {
 		}
 		pr, err := brc.PullRequest(
 			ctx,
-			fmt.Sprintf("%s-positronic-blogger", checkpoint.Format(time.RFC3339)),
+			fmt.Sprintf("%s%s-positronic-blogger", b.GithubPrefix, checkpoint.Format(time.RFC3339)),
 			"Auto blogging done from https://github.com/seriousben/positronic-blogger",
 		)
 		if err != nil {
@@ -203,6 +209,7 @@ func (b *Blogger) setCheckpoint(ctx context.Context, gh *github.BranchClient, ch
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 
 	err = gh.UpdateFile(ctx, commit, b.NewsblurCheckpointPath, checkpointSHA, string(checkpointJSON))
