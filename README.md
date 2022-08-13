@@ -1,24 +1,16 @@
-# newsblur-to-hugo
+# positronic-blogger
 
-newsblur-to-hugo - A tool to share newsblur shared stories in a hugo blog.
+positronic-blogger - A tool to assemble different sources into a markdown blog.
 
 ## Usage
 
 ```
-NAME:
-   newsblur-to-hugo - Post newsblur shared stories to hugo blogs.
-
-USAGE:
-   main [global options] command [command options] [arguments...]
-
-VERSION:
-   0.0.0
-
-COMMANDS:
-   poll     Synchronization poller that periodically synchronizes new shared posts.
-   help, h  Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --help, -h     show help (default: false)
-   --version, -v  print the version (default: false)
+POSITRONIC_NEWSBLUR_USERNAME=<nb_username> \
+POSITRONIC_NEWSBLUR_PASSWORD=<nb password> \
+POSITRONIC_GITHUB_TOKEN=<gh token> \
+POSITRONIC_GITHUB_REPO=<ghorg/repo\
+POSITRONIC_NEWSBLUR_CONTENT_PATH=content/links \
+POSITRONIC_NEWSBLUR_CHECKPOINT_PATH=content/links/checkpoint \
+POSITRONIC_SKIP_MERGE=true \
+go run ./cmd/...
 ```

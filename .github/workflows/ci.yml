@@ -19,11 +19,16 @@ jobs:
     - uses: WillAbides/setup-go-faster@v1.7.0
       with:
         go-version: "*"
-    - run: "go test -coverprofile=coverage.out -covermode=count ./..."
+    - run: "go test -v -coverprofile=coverage.out -covermode=count ./..."
+      env:
+        POSITRONIC_TEST_GITHUB_REPO: seriousben/positronic-blogger-git-api-playground
+        POSITRONIC_TEST_GITHUB_TOKEN: ${{ secrets.POSITRONIC_TEST_GITHUB_TOKEN }}
+        POSITRONIC_TEST_NEWSBLUR_USERNAME: ${{ secrets.POSITRONIC_TEST_NEWSBLUR_USERNAME }}
+        POSITRONIC_TEST_NEWSBLUR_PASSWORD: ${{ secrets.POSITRONIC_TEST_NEWSBLUR_PASSWORD }}
+
     - run: "go vet ./..."
-    - uses: dominikh/staticcheck-action@v1.1.0
+    - uses: dominikh/staticcheck-action@v1.2.0
       with:
-        version: "2021.1.2"
         install-go: false
     - name: Test Release
       uses: goreleaser/goreleaser-action@v2
@@ -32,6 +37,6 @@ jobs:
         version: latest
         args: build --snapshot --single-target
     - name: Patch Coverage
-      uses: seriousben/go-patch-cover-action@v1.0.0
+      uses: seriousben/go-patch-cover-action@v1
       with:
         version: main
