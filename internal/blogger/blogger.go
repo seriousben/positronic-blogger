@@ -3,36 +3,39 @@ package blogger
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"html/template"
+	"io"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
-	"github.com/google/go-github/github"
 	"github.com/gosimple/slug"
 	"github.com/seriousben/newsblur-to-hugo/internal/github"
 	"github.com/seriousben/newsblur-to-hugo/internal/newsblur"
 )
 
-func Blog() {
-	// 1. Sync newsblur shared stories
-	// 2. Other things: Twitter, github, other apps
-}
-
-const blogRepositoryUser = "seriousben"
-const blogRepository = "seriousben.com"
-const blogPostPath = "content/links/"
-
+const (
+	postTimeFormat = "2006-01-02"
+)
 
 var (
-	postTemplate = `
-+++
-date = "{{.Date}}"
-publishDate = "{{.Date}}"
-title = {{.Title | quote}}
-originalUrl = {{.Url | quote}}
+	newsblurDupLinkRegex = regexp.MustCompile(`<a href="(.*)">.*</a>`)
+	tmpl                 = template.Must(template.New("short").Funcs(template.FuncMap{
+		"quote": strconv.Quote,
+		"timeFormat": func(t time.Time) string {
+			return t.Format(time.RFC3339Nano)
+		},
+	}).Parse(postTemplate))
+	postTemplate = `+++
+date = "{{ .Date | timeFormat }}"
+publishDate = "{{ .Date | timeFormat }}"
+title = {{ .Title | quote }}
+originalUrl = "{{.URL}}"
 comment = {{.Comment | quote}}
 +++
 
@@ -40,203 +43,172 @@ comment = {{.Comment | quote}}
 
 {{.Comment}}
 
-[Read more]({{.Url}})
+[Read more]({{.URL}})
 `
 )
 
-type BlogPost struct {
+type blogPost struct {
 	Title   string
 	URL     string
 	Comment string
 	Date    time.Time
 }
 
-type Checkpoint struct {
-	SHA        string
-	Checkpoint *time.Time
-}
-
-func NewBlogPost(story newsblur.Story) (BlogPost, error) {
-	date, err := time.Parse(newsblur.NewsblurTimeFormat, story.SharedDate)
-	if err != nil {
-		return BlogPost{}, fmt.Errorf("error parsing date of story: %w", err)
-	}
-
-	return BlogPost{
+func newsblurStoryToBlogPost(story *newsblur.Story) (blogPost, error) {
+	comment := newsblurDupLinkRegex.ReplaceAllString(
+		story.Comment,
+		"$1",
+	)
+	return blogPost{
 		Title:   story.Title,
 		URL:     story.Permalink,
-		Comment: story.Comment,
-		Date:    date,
+		Comment: comment,
+		Date:    story.SharedDate,
 	}, nil
 }
 
-func ToStringPtr(str string) *string {
-	return &str
+type Config struct {
+	GithubClient           *github.Client
+	NewsblurClient         *newsblur.Client
+	NewsblurContentPath    string
+	NewsblurCheckpointPath string
+	SkipMerge              bool
 }
 
-func retryFunc(theFunc func() (bool, error)) error {
-	retry, err := theFunc()
-	if retry {
-		_, err = theFunc()
+type Blogger struct {
+	Config
+}
+
+func New(cfg Config) (*Blogger, error) {
+	return &Blogger{
+		Config: cfg,
+	}, nil
+}
+
+func (b *Blogger) Run(ctx context.Context) error {
+	checkpoint, checkpointSHA, err := b.getCheckpoint(ctx)
+	if err != nil {
 		return err
 	}
-	return err
-}
 
-func GetCheckpoint(ctx context.Context, githubClient *github.Client) (*Checkpoint, error) {
-	<-apiTicker.C
-	fileContent, _, _, err := githubClient.Repositories.GetContents(ctx, blogRepositoryUser, blogRepository, blogPostPath+"checkpoint", nil)
+	it, err := b.NewsblurClient.SharedStoriesIterator(ctx, checkpoint)
 	if err != nil {
-		return nil, fmt.Errorf("error getting checkpoint: %w", err)
+		return err
 	}
 
-	content, err := fileContent.GetContent()
-	if err != nil {
-		return nil, fmt.Errorf("error decoding file content: %w", err)
-	}
-	if content == "" {
-		log.Println("checkpoint was empty, full resync will happen")
-		return &Checkpoint{
-			SHA:        fileContent.GetSHA(),
-			Checkpoint: nil,
-		}, nil
-	}
+	var brc *github.BranchClient
+	lastCheckpointAt := checkpoint
 
-	content = strings.Trim(content, "\r\n")
-
-	date, err := time.Parse(newsblur.NewsblurTimeFormat, content)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing checkpoint: %w", err)
-	}
-	return &Checkpoint{
-		SHA:        fileContent.GetSHA(),
-		Checkpoint: &date,
-	}, nil
-}
-
-func SetCheckpoint(ctx context.Context, githubClient *github.Client, prevCheckpoint *Checkpoint, checkpoint time.Time) error {
-	dateStr := checkpoint.Format(newsblur.NewsblurTimeFormat)
-
-	commit := "auto: set checkpoint and deploy"
-	var opts = github.RepositoryContentFileOptions{
-		Message:   &commit,
-		Content:   []byte(dateStr),
-		SHA:       &prevCheckpoint.SHA,
-		Committer: &github.CommitAuthor{Name: ToStringPtr("Benjamin Boudreau"), Email: ToStringPtr("boudreau.benjamin@gmail.com")},
-	}
-
-	// Workaround for 409 status code by github
-	apiCall := func() (bool, error) {
-		<-apiTicker.C
-		_, resp, err := githubClient.Repositories.UpdateFile(ctx, blogRepositoryUser, blogRepository, blogPostPath+"checkpoint", &opts)
-
-		if resp.StatusCode == 409 {
-			return true, nil
-		}
-
-		return false, err
-	}
-
-	err := retryFunc(apiCall)
-
-	if err != nil {
-		return fmt.Errorf("updating checkpoint file in github: %w", err)
-	}
-
-	return nil
-}
-
-var tmpl = template.Must(template.New("short").Funcs(template.FuncMap{
-	"quote": strconv.Quote,
-}).Parse(postTemplate))
-
-func CreateBlogPost(githubClient *github.Client, post BlogPost, dryRun bool) error {
-	fileName := slug.Make(post.Title) + ".md"
-	commit := "auto: new short post " + fileName + " [skip ci]"
-
-	buf := new(bytes.Buffer)
-	err := tmpl.Execute(buf, post)
-	if err != nil {
-		return fmt.Errorf("executing template: %w", err)
-	}
-
-	if dryRun {
-		log.Printf("[DRY-RUN] Post content: %s\n", buf.String())
-		return nil
-	}
-
-	var opts = github.RepositoryContentFileOptions{
-		Message:   &commit,
-		Content:   buf.Bytes(),
-		Committer: &github.CommitAuthor{Name: ToStringPtr("Benjamin Boudreau"), Email: ToStringPtr("boudreau.benjamin@gmail.com")},
-	}
-
-	// Workaround for 409 status code by github
-	apiCall := func() (bool, error) {
-		<-apiTicker.C
-		_, resp, err := githubClient.Repositories.CreateFile(context.TODO(), blogRepositoryUser, blogRepository, blogPostPath+fileName, &opts)
-
-		if resp.StatusCode == 409 {
-			return true, nil
-		}
-
-		return false, err
-	}
-
-	err = retryFunc(apiCall)
-
-	if err != nil {
-		return fmt.Errorf("creating blog post file in github: %w", err)
-	}
-
-	log.Printf("Created %s (%s)", commit, post.Date)
-	return nil
-}
-
-func syncSharedStoriesWithPosts(ctx context.Context, githubClient *github.Client, newsblurAPI *newsblur.Client, dryRun bool) int {
-	checkpoint, err := GetCheckpoint(ctx, githubClient)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Got checkpoint %s", checkpoint)
-
-	ch := newsblurAPI.IterSharedStories(ctx, checkpoint.Checkpoint)
-
-	storiesNum := 1
-	var newCheckpoint *time.Time
-	for story := range ch {
-		log.Printf("Creating Story[%d]: %s %+v\n", storiesNum, story.ID, &story)
-		blogPost, err := NewBlogPost(story)
-		if err != nil {
-			log.Println("Error creating blog post", err)
+	for {
+		st, err := it.Next(ctx)
+		if err == io.EOF {
 			break
 		}
-
-		err = CreateBlogPost(githubClient, blogPost, dryRun)
 		if err != nil {
-			log.Println("Error posting blog post", err)
-			break
+			return err
 		}
-		log.Printf("Created Story[%d] successfully", storiesNum)
-		storiesNum += 1
 
-		if newCheckpoint == nil {
-			newCheckpoint = &blogPost.Date
+		post, err := newsblurStoryToBlogPost(st)
+		if err != nil {
+			return err
 		}
-	}
 
-	if newCheckpoint != nil && (checkpoint.Checkpoint == nil || !checkpoint.Checkpoint.Equal(*newCheckpoint)) {
-		if dryRun {
-			log.Printf("[DRY-RUN] Saved new checkpoint %s -> %s", checkpoint, newCheckpoint)
-		} else {
-			err = SetCheckpoint(ctx, githubClient, checkpoint, *newCheckpoint)
+		// Safety check to make sure posts returned from
+		// content providers are newer than passed in checkpoint.
+		if post.Date.After(lastCheckpointAt) {
+			lastCheckpointAt = post.Date
+		}
+
+		// start branch on first new content.
+		if brc == nil {
+			brc, err = b.GithubClient.StartBranch(ctx, fmt.Sprintf("%s-positronic-blogger", checkpoint.Format("2006-01-02T1504")))
 			if err != nil {
-				log.Fatal("Could not save new checkpoint", err)
-				return 0
+				return err
 			}
-			log.Printf("Saved new checkpoint %s -> %s", checkpoint, newCheckpoint)
+		}
+		fileName := fmt.Sprintf("%s-%s.md", post.Date.Format(postTimeFormat), slug.Make(post.Title))
+		commit := fmt.Sprintf("auto: new short post %s [skip ci]", fileName)
+
+		buf := new(bytes.Buffer)
+		err = tmpl.Execute(buf, post)
+		if err != nil {
+			return fmt.Errorf("executing template: %w", err)
+		}
+
+		err = brc.CreateFile(ctx, commit, fmt.Sprintf("%s/%s", b.NewsblurContentPath, fileName), buf.String())
+		if err != nil {
+			return err
 		}
 	}
 
-	return storiesNum - 1
+	if brc != nil {
+		if err = b.setCheckpoint(ctx, brc, lastCheckpointAt, checkpointSHA); err != nil {
+			return err
+		}
+		pr, err := brc.PullRequest(
+			ctx,
+			fmt.Sprintf("%s-positronic-blogger", checkpoint.Format(time.RFC3339)),
+			"Auto blogging done from https://github.com/seriousben/positronic-blogger",
+		)
+		if err != nil {
+			return err
+		}
+		if !b.Config.SkipMerge {
+			err = brc.WaitAndMerge(ctx, pr)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (b *Blogger) getCheckpoint(ctx context.Context) (time.Time, string, error) {
+	checkpointStr, checkpointSHA, err := b.GithubClient.GetContent(ctx, b.NewsblurCheckpointPath)
+	if err != nil && !errors.Is(err, github.ErrFileNotFound) {
+		return time.Time{}, "", err
+	}
+
+	if checkpointStr == "" {
+		return time.Time{}, "", nil
+	}
+
+	var checkpoint time.Time
+	err = json.Unmarshal([]byte(checkpointStr), &checkpoint)
+	if err != nil {
+		log.Printf("checkpoint is not JSON: %v", err)
+	} else {
+		return checkpoint, checkpointSHA, nil
+	}
+
+	// fallback on legacy newsblur time format.
+	checkpoint, err = time.Parse("2006-01-02 15:04:05.999999", strings.Trim(checkpointStr, "\r\n"))
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("error parsing checkpoint: %w", err)
+	}
+
+	return checkpoint, checkpointSHA, nil
+}
+
+func (b *Blogger) setCheckpoint(ctx context.Context, gh *github.BranchClient, checkpoint time.Time, checkpointSHA string) error {
+	checkpointJSON, err := json.Marshal(checkpoint)
+	if err != nil {
+		return err
+	}
+
+	commit := "auto: checkpoint"
+
+	if checkpointSHA == "" {
+		err = gh.CreateFile(ctx, commit, b.NewsblurCheckpointPath, string(checkpointJSON))
+		if err != nil {
+			return err
+		}
+	}
+
+	err = gh.UpdateFile(ctx, commit, b.NewsblurCheckpointPath, checkpointSHA, string(checkpointJSON))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

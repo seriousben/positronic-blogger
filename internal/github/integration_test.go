@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"gotest.tools/v3/assert"
@@ -44,19 +45,42 @@ func Test_Client(t *testing.T) {
 	br, err := cl.StartBranch(ctx, branchName)
 	assert.NilError(t, err)
 	defer func() {
-		_, _ = br.DeleteBranch(ctx)
+		_ = br.DeleteBranch(ctx)
 	}()
 
-	_, err = br.CreateFile(ctx, "adding first file", fmt.Sprintf("%s/%s", branchName, "file1.md"), `
-# File1
+	file1Path := fmt.Sprintf("%s/%s", branchName, "file1.md")
+	file1Content := fmt.Sprintf(`
+	# File1
+	
+	Content of file1
 
-Content of file1
+	%s`, uid)
+	err = br.CreateFile(ctx, "adding first file", file1Path, file1Content)
+	assert.NilError(t, err)
+
+	err = br.CreateFile(ctx, "adding second file", fmt.Sprintf("%s/%s", branchName, "file2.md"), `
+# File2
+
+Content of file2
 	`)
 	assert.NilError(t, err)
 
-	//t.Log("manual verification time")
+	//t.Logf("manual verification time: %s", branchName)
 	//time.Sleep(30 * time.Second)
 
-	_, err = br.PullRequestAndMerge(ctx, branchName, "Integration testing")
+	pr, err := br.PullRequest(ctx, branchName, "Integration testing")
 	assert.NilError(t, err)
+
+	err = br.WaitAndMerge(ctx, pr)
+	assert.NilError(t, err)
+
+	contentCtx, cancelFunc := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelFunc()
+
+	content, _, err := cl.GetContent(contentCtx, file1Path)
+	assert.NilError(t, err)
+	assert.Equal(t, content, file1Content)
+
+	_, _, err = cl.GetContent(contentCtx, "file-not-found")
+	assert.ErrorIs(t, err, ErrFileNotFound)
 }

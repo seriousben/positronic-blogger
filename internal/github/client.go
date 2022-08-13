@@ -2,8 +2,12 @@ package github
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/github"
@@ -11,6 +15,8 @@ import (
 )
 
 const apiRequestRateLimit = 720 * time.Millisecond
+
+var ErrFileNotFound = errors.New("file not found")
 
 type Client struct {
 	ghClient    *github.Client
@@ -31,6 +37,46 @@ func New(ctx context.Context, githubToken, owner, repo string) (*Client, error) 
 		owner:     owner,
 		repo:      repo,
 	}, nil
+}
+
+func (c *Client) GetContent(ctx context.Context, path string) (content string, sha string, err error) {
+	mainRef, _, err := c.ghClient.Git.GetRef(ctx, c.owner, c.repo, "refs/heads/main")
+	if err != nil {
+		return "", "", err
+	}
+
+	tr, _, err := c.ghClient.Git.GetTree(ctx, c.owner, c.repo, *mainRef.Object.SHA, false)
+	if err != nil {
+		return "", "", err
+	}
+
+	for _, p := range strings.Split(path, string(filepath.Separator)) {
+	process_entries:
+		for _, te := range tr.Entries {
+			if *te.Path == p {
+				if *te.Type == "tree" {
+					<-c.apiTicker.C
+					tr, _, err = c.ghClient.Git.GetTree(ctx, c.owner, c.repo, *te.SHA, false)
+					if err != nil {
+						return "", "", err
+					}
+					goto process_entries
+				}
+				<-c.apiTicker.C
+				bl, _, err := c.ghClient.Git.GetBlob(ctx, c.owner, c.repo, *te.SHA)
+				if err != nil {
+					return "", "", err
+				}
+				b, err := base64.StdEncoding.DecodeString(*bl.Content)
+				if err != nil {
+					return "", "", err
+				}
+				return string(b), *bl.SHA, nil
+			}
+		}
+	}
+
+	return "", "", fmt.Errorf("file not found (%s): %w", path, ErrFileNotFound)
 }
 
 type BranchClient struct {
@@ -69,27 +115,45 @@ func (c *Client) StartBranch(ctx context.Context, branchName string) (*BranchCli
 	}, nil
 }
 
-func (c *BranchClient) CreateFile(ctx context.Context, commitMsg, path, content string) (*BranchClient, error) {
+func (c *BranchClient) CreateFile(ctx context.Context, commitMsg, path, content string) error {
 	<-c.client.apiTicker.C
 
 	// TODO: Manage it as a tree!
 	// https://stackoverflow.com/questions/11801983/how-to-create-a-commit-and-push-into-repo-with-github-api-v3
 
 	var opts = github.RepositoryContentFileOptions{
-		Branch:    github.String(c.branchName),
+		Branch:    &c.branchName,
 		Message:   &commitMsg,
 		Content:   []byte(content),
 		Committer: &github.CommitAuthor{Name: github.String("Benjamin Boudreau"), Email: github.String("boudreau.benjamin@gmail.com")},
 	}
 	_, _, err := c.client.ghClient.Repositories.CreateFile(context.TODO(), c.client.owner, c.client.repo, path, &opts)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return c, nil
+	return nil
 }
 
-func (c *BranchClient) PullRequestAndMerge(ctx context.Context, title, body string) (*Client, error) {
+func (c *BranchClient) UpdateFile(ctx context.Context, commitMsg, path, sha, content string) error {
+	// TODO: Manage it as a tree!
+	// https://stackoverflow.com/questions/11801983/how-to-create-a-commit-and-push-into-repo-with-github-api-v3
+
+	var opts = github.RepositoryContentFileOptions{
+		Branch:    &c.branchName,
+		Message:   &commitMsg,
+		Content:   []byte(content),
+		Committer: &github.CommitAuthor{Name: github.String("Benjamin Boudreau"), Email: github.String("boudreau.benjamin@gmail.com")},
+		SHA:       &sha,
+	}
+	_, _, err := c.client.ghClient.Repositories.CreateFile(context.TODO(), c.client.owner, c.client.repo, path, &opts)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *BranchClient) PullRequest(ctx context.Context, title, body string) (*github.PullRequest, error) {
 	<-c.client.apiTicker.C
 
 	pr, _, err := c.client.ghClient.PullRequests.Create(ctx, c.client.owner, c.client.repo, &github.NewPullRequest{
@@ -101,15 +165,21 @@ func (c *BranchClient) PullRequestAndMerge(ctx context.Context, title, body stri
 	if err != nil {
 		return nil, err
 	}
+	return pr, nil
+}
 
-	i := 0
+func (c *BranchClient) WaitAndMerge(ctx context.Context, pr *github.PullRequest) error {
+	var (
+		i   = 0
+		err error
+	)
 	for pr.Mergeable == nil || !*pr.Mergeable {
 		i++
 		log.Println("PR not mergeable")
 		time.Sleep(time.Duration(i) * time.Second)
 		pr, _, err = c.client.ghClient.PullRequests.Get(ctx, c.client.owner, c.client.repo, *pr.Number)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -117,17 +187,17 @@ func (c *BranchClient) PullRequestAndMerge(ctx context.Context, title, body stri
 
 	_, _, err = c.client.ghClient.PullRequests.Merge(ctx, c.client.owner, c.client.repo, *pr.Number, "", nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	return c.DeleteBranch(ctx)
 }
 
-func (c *BranchClient) DeleteBranch(ctx context.Context) (*Client, error) {
+func (c *BranchClient) DeleteBranch(ctx context.Context) error {
 	<-c.client.apiTicker.C
 	_, err := c.client.ghClient.Git.DeleteRef(ctx, c.client.owner, c.client.repo, c.branchRef)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return c.client, nil
+	return nil
 }
