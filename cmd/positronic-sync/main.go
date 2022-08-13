@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/seriousben/newsblur-to-hugo/internal/blogger"
-	"github.com/seriousben/newsblur-to-hugo/internal/github"
-	"github.com/seriousben/newsblur-to-hugo/internal/newsblur"
+	"github.com/seriousben/positronic-blogger/internal/blogger"
+	"github.com/seriousben/positronic-blogger/internal/github"
+	"github.com/seriousben/positronic-blogger/internal/newsblur"
 )
 
 const (

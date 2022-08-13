@@ -1,5 +1,5 @@
 builds:
-  - main: ./cmd
+  - main: ./cmd/positronic-sync
     id: "cli"
     binary: positronic-blogger
     goos:
