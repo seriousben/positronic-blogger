@@ -27,7 +27,7 @@ jobs:
         POSITRONIC_TEST_NEWSBLUR_PASSWORD: ${{ secrets.POSITRONIC_TEST_NEWSBLUR_PASSWORD }}
 
     - run: "go vet ./..."
-    - uses: dominikh/staticcheck-action@v1.2.0
+    - uses: dominikh/staticcheck-action@v1.3.0
       with:
         install-go: false
     - name: Test Release
