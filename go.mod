@@ -8,12 +8,12 @@ require (
 	github.com/gosimple/slug v1.13.1
 	golang.org/x/net v0.11.0
 	golang.org/x/oauth2 v0.9.0
-	gotest.tools/v3 v3.4.0
+	gotest.tools/v3 v3.5.0
 )
 
 require (
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/go-cmp v0.5.8 // indirect
+	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
