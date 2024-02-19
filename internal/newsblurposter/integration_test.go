@@ -1,4 +1,4 @@
-package blogger
+package newsblurposter
 
 import (
 	"context"
