@@ -129,7 +129,6 @@ func Main() {
 	})
 
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		data := i.ModalSubmitData()
 		user := i.Member.User
 		if user.ID != "905167870403702884" {
 			log.Printf("user %s not allowed: %+v", user.ID, user)
@@ -142,6 +141,7 @@ func Main() {
 				h(s, i)
 			}
 		case discordgo.InteractionModalSubmit:
+			data := i.ModalSubmitData()
 			switch data.CustomID {
 			case "serious-post":
 				inputByID := map[string]discordgo.MessageComponent{}
