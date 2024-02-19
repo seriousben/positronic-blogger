@@ -1,65 +1,32 @@
-package blogger
+package newsblurposter
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"path"
 	"regexp"
-	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
-	"github.com/gosimple/slug"
 	"github.com/seriousben/positronic-blogger/internal/github"
 	"github.com/seriousben/positronic-blogger/internal/newsblur"
-)
-
-const (
-	postTimeFormat = "2006-01-02"
+	"github.com/seriousben/positronic-blogger/internal/template"
 )
 
 var (
 	newsblurDupLinkRegex = regexp.MustCompile(`<a href="(.*)">.*</a>`)
-	tmpl                 = template.Must(template.New("short").Funcs(template.FuncMap{
-		"quote": strconv.Quote,
-		"timeFormat": func(t time.Time) string {
-			return t.Format(time.RFC3339Nano)
-		},
-	}).Parse(postTemplate))
-	postTemplate = `+++
-date = "{{ .Date | timeFormat }}"
-publishDate = "{{ .Date | timeFormat }}"
-title = {{ .Title | quote }}
-originalUrl = "{{.URL}}"
-comment = {{.Comment | quote}}
-+++
-
-### Comment
-
-{{.Comment}}
-
-[Read more]({{.URL}})
-`
 )
 
-type blogPost struct {
-	Title   string
-	URL     string
-	Comment string
-	Date    time.Time
-}
-
-func newsblurStoryToBlogPost(story *newsblur.Story) (blogPost, error) {
+func newsblurStoryToBlogPost(story *newsblur.Story) (template.Post, error) {
 	comment := newsblurDupLinkRegex.ReplaceAllString(
 		story.Comment,
 		"$1",
 	)
-	return blogPost{
+	return template.Post{
 		Title:   story.Title,
 		URL:     story.Permalink,
 		Comment: comment,
@@ -77,17 +44,17 @@ type Config struct {
 	GithubPrefix              string
 }
 
-type Blogger struct {
+type Poster struct {
 	Config
 }
 
-func New(cfg Config) (*Blogger, error) {
-	return &Blogger{
+func New(cfg Config) (*Poster, error) {
+	return &Poster{
 		Config: cfg,
 	}, nil
 }
 
-func (b *Blogger) Run(ctx context.Context) error {
+func (b *Poster) Run(ctx context.Context) error {
 	checkpoint, checkpointSHA, err := b.getCheckpoint(ctx)
 	if err != nil {
 		return err
@@ -132,16 +99,15 @@ func (b *Blogger) Run(ctx context.Context) error {
 				return err
 			}
 		}
-		fileName := fmt.Sprintf("%s-%s.md", post.Date.Format(postTimeFormat), slug.Make(post.Title))
+		fileName := post.FileName()
 		commit := fmt.Sprintf("auto: new short post %s [skip ci]", fileName)
 
-		buf := new(bytes.Buffer)
-		err = tmpl.Execute(buf, post)
+		buf, err := post.ToMarkdown()
 		if err != nil {
-			return fmt.Errorf("executing template: %w", err)
+			return err
 		}
 
-		err = brc.CreateFile(ctx, commit, fmt.Sprintf("%s/%s", b.NewsblurContentPath, fileName), buf.String())
+		err = brc.CreateFile(ctx, commit, path.Join(b.NewsblurContentPath, fileName), buf.String())
 		if err != nil {
 			return err
 		}
@@ -169,7 +135,7 @@ func (b *Blogger) Run(ctx context.Context) error {
 	return nil
 }
 
-func (b *Blogger) getCheckpoint(ctx context.Context) (time.Time, string, error) {
+func (b *Poster) getCheckpoint(ctx context.Context) (time.Time, string, error) {
 	checkpointStr, checkpointSHA, err := b.GithubClient.GetContent(ctx, b.NewsblurCheckpointPath)
 	if err != nil && !errors.Is(err, github.ErrFileNotFound) {
 		return time.Time{}, "", err
@@ -196,7 +162,7 @@ func (b *Blogger) getCheckpoint(ctx context.Context) (time.Time, string, error) 
 	return checkpoint, checkpointSHA, nil
 }
 
-func (b *Blogger) setCheckpoint(ctx context.Context, gh *github.BranchClient, checkpoint time.Time, checkpointSHA string) error {
+func (b *Poster) setCheckpoint(ctx context.Context, gh *github.BranchClient, checkpoint time.Time, checkpointSHA string) error {
 	checkpointJSON, err := json.Marshal(checkpoint)
 	if err != nil {
 		return err

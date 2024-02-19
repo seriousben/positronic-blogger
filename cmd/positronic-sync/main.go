@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/seriousben/positronic-blogger/internal/blogger"
 	"github.com/seriousben/positronic-blogger/internal/github"
 	"github.com/seriousben/positronic-blogger/internal/newsblur"
+	"github.com/seriousben/positronic-blogger/internal/newsblurposter"
 )
 
 const (
@@ -64,7 +64,7 @@ func main() {
 		log.Fatalf("error creating github client: %v", err)
 	}
 
-	bl, err := blogger.New(blogger.Config{
+	poster, err := newsblurposter.New(newsblurposter.Config{
 		GithubClient:           ghClient,
 		NewsblurClient:         nbClient,
 		NewsblurContentPath:    nbContentPath,
@@ -75,7 +75,7 @@ func main() {
 		log.Fatalf("error creating blogger: %v", err)
 	}
 
-	err = bl.Run(ctx)
+	err = poster.Run(ctx)
 	if err != nil {
 		log.Fatalf("error running blogger: %v", err)
 	}
