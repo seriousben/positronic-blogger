@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/bwmarrin/discordgo v0.27.2-0.20240216140604-15ef2a43d47f
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/uuid v1.3.1
+	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.14.0
 	golang.org/x/net v0.25.0
 	golang.org/x/oauth2 v0.23.0
