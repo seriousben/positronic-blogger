@@ -1,6 +1,6 @@
 module github.com/seriousben/positronic-blogger
 
-go 1.18
+go 1.24.0
 
 require (
 	github.com/bwmarrin/discordgo v0.28.1
@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.14.0
 	golang.org/x/net v0.29.0
-	golang.org/x/oauth2 v0.24.0
+	golang.org/x/oauth2 v0.31.0
 	gotest.tools/v3 v3.5.1
 )
 
