@@ -93,8 +93,9 @@ func (b *Poster) Run(ctx context.Context) error {
 		}
 
 		// start branch on first new content.
+		// Use second-precision timestamp to avoid collisions when retrying failed runs.
 		if brc == nil {
-			brc, err = b.GithubClient.StartBranch(ctx, fmt.Sprintf("%s%s-positronic-blogger", b.GithubPrefix, checkpoint.Format("2006-01-02T1504")))
+			brc, err = b.GithubClient.StartBranch(ctx, fmt.Sprintf("%s%s-positronic-blogger", b.GithubPrefix, checkpoint.Format("2006-01-02T150405")))
 			if err != nil {
 				return err
 			}
