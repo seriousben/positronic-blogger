@@ -1,3 +1,5 @@
+version: 2
+
 builds:
   - main: ./cmd/positronic-sync
     id: "cli"
