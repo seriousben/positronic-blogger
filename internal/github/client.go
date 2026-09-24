@@ -18,8 +18,9 @@ import (
 const (
 	apiRequestRateLimit = 720 * time.Millisecond
 
-	// A PR close also deletes its head ref, so recreating that ref can race
-	// with the delete and come back as "Reference already exists" (422).
+	// GitHub auto-deletes the head ref when a PR merges (delete_branch_on_merge),
+	// so recreating that ref can race with the delete and come back as
+	// "Reference already exists" (422).
 	maxCreateRefAttempts = 3
 	createRefRetryDelay  = 200 * time.Millisecond
 )
@@ -339,9 +340,10 @@ func (c *BranchClient) WaitAndMerge(ctx context.Context, pr *github.PullRequest)
 
 func (c *BranchClient) DeleteBranch(ctx context.Context) error {
 	<-c.client.apiTicker.C
-	_, err := c.client.ghClient.Git.DeleteRef(ctx, c.client.owner, c.client.repo, c.branchRef)
-	if err != nil {
-		return err
+	// The merge above may already have deleted the ref.
+	resp, err := c.client.ghClient.Git.DeleteRef(ctx, c.client.owner, c.client.repo, c.branchRef)
+	if err != nil && resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
+		return nil
 	}
-	return nil
+	return err
 }
