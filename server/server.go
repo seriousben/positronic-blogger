@@ -179,7 +179,7 @@ func Main() {
 				}
 
 				// start branch on first new content.
-				brc, err := ghClient.StartBranch(ctx, fmt.Sprintf("%s-positronic-blogger", now.Format("2006-01-02T1504")))
+				brc, err := ghClient.StartBranch(ctx, fmt.Sprintf("%s-positronic-blogger", now.Format("2006-01-02T150405")))
 				if err != nil {
 					log.Printf("error creating branch: %v\n", err)
 					return
