@@ -9,7 +9,7 @@ require (
 	github.com/gosimple/slug v1.14.0
 	golang.org/x/net v0.55.0
 	golang.org/x/oauth2 v0.24.0
-	gotest.tools/v3 v3.5.1
+	gotest.tools/v3 v3.5.2
 )
 
 require (
