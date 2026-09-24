@@ -15,7 +15,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const apiRequestRateLimit = 720 * time.Millisecond
+const (
+	apiRequestRateLimit = 720 * time.Millisecond
+
+	// A PR close also deletes its head ref, so recreating that ref can race
+	// with the delete and come back as "Reference already exists" (422).
+	maxCreateRefAttempts = 3
+	createRefRetryDelay  = 200 * time.Millisecond
+)
 
 var ErrFileNotFound = errors.New("file not found")
 
@@ -38,6 +45,25 @@ func New(ctx context.Context, githubToken, owner, repo string) (*Client, error) 
 		owner:     owner,
 		repo:      repo,
 	}, nil
+}
+
+// headFilter returns the qualified branch filter the PR list API expects
+// ("owner:branch"). GitHub ignores an unqualified branch name and returns every
+// open PR in the repository instead.
+func (c *Client) headFilter(branchName string) string {
+	return c.owner + ":" + branchName
+}
+
+// filterPRsByHeadRef keeps only the PRs for branchName, in case the API
+// returns more than the head filter asked for.
+func filterPRsByHeadRef(prs []*github.PullRequest, branchName string) []*github.PullRequest {
+	matching := make([]*github.PullRequest, 0, len(prs))
+	for _, pr := range prs {
+		if pr.Head != nil && pr.Head.Ref != nil && *pr.Head.Ref == branchName {
+			matching = append(matching, pr)
+		}
+	}
+	return matching
 }
 
 func (c *Client) GetContent(ctx context.Context, path string) (content string, sha string, err error) {
@@ -87,6 +113,30 @@ type BranchClient struct {
 	baseRef    string
 }
 
+// createRefRetryingOnExisting creates ref, retrying while GitHub answers that
+// the reference already exists.
+func (c *Client) createRefRetryingOnExisting(ctx context.Context, ref string, obj *github.GitObject) error {
+	var (
+		err  error
+		wait = createRefRetryDelay
+	)
+	for attempt := 1; attempt <= maxCreateRefAttempts; attempt++ {
+		var resp *github.Response
+		_, resp, err = c.ghClient.Git.CreateRef(ctx, c.owner, c.repo, &github.Reference{
+			Ref:    github.String(ref),
+			Object: obj,
+		})
+		if err == nil || resp == nil || resp.StatusCode != http.StatusUnprocessableEntity {
+			return err
+		}
+		if attempt < maxCreateRefAttempts {
+			time.Sleep(wait)
+			wait *= 2
+		}
+	}
+	return err
+}
+
 // https://git-scm.com/book/en/v2
 // https://gist.github.com/ursulacj/36ade01fa6bd5011ea31f3f6b572834e
 // https://stackoverflow.com/questions/53260051/github-new-branch-creation-and-pull-request-using-rest-api
@@ -106,66 +156,62 @@ func (c *Client) StartBranch(ctx context.Context, branchName string) (*BranchCli
 		Object: mainRef.Object,
 	})
 	if err != nil {
-		// Check if this is a "reference already exists" error (422)
-		if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
-			// Branch already exists - fetch it and check if it's based on current main
-			existingRef, _, err := c.ghClient.Git.GetRef(ctx, c.owner, c.repo, ref)
-			if err != nil {
-				return nil, fmt.Errorf("branch %s exists but cannot be fetched: %w", branchName, err)
-			}
+		// Anything but "reference already exists" (422) is fatal.
+		if resp == nil || resp.StatusCode != http.StatusUnprocessableEntity {
+			return nil, err
+		}
 
-			// Only reuse if the branch is based on current main
-			if *existingRef.Object.SHA == *mainRef.Object.SHA {
-				log.Printf("Branch %s already exists at current main, reusing it", branchName)
-				return &BranchClient{
-					client:     c,
-					branchName: branchName,
-					branchRef:  ref,
-					baseRef:    *mainRef.Ref,
-				}, nil
-			}
+		// Branch already exists - fetch it and check if it's based on current main
+		existingRef, _, err := c.ghClient.Git.GetRef(ctx, c.owner, c.repo, ref)
+		if err != nil {
+			return nil, fmt.Errorf("branch %s exists but cannot be fetched: %w", branchName, err)
+		}
 
-			// Branch exists but is stale (behind main) - close any open PRs, delete and recreate
-			log.Printf("Branch %s exists but is stale, closing PRs and recreating", branchName)
+		// Only reuse if the branch is based on current main
+		if *existingRef.Object.SHA == *mainRef.Object.SHA {
+			log.Printf("Branch %s already exists at current main, reusing it", branchName)
+			return &BranchClient{
+				client:     c,
+				branchName: branchName,
+				branchRef:  ref,
+				baseRef:    *mainRef.Ref,
+			}, nil
+		}
 
-			// Find and close any open PRs for this branch before deleting it
-			<-c.apiTicker.C
-			prs, _, err := c.ghClient.PullRequests.List(ctx, c.owner, c.repo, &github.PullRequestListOptions{
-				Head:  branchName,
-				State: "open",
-			})
-			if err != nil {
-				log.Printf("warning: failed to list PRs for branch %s: %v", branchName, err)
-			} else {
-				for _, pr := range prs {
-					<-c.apiTicker.C
-					_, _, err := c.ghClient.PullRequests.Edit(ctx, c.owner, c.repo, *pr.Number, &github.PullRequest{
-						State: github.String("closed"),
-					})
-					if err != nil {
-						log.Printf("warning: failed to close PR #%d: %v", *pr.Number, err)
-					} else {
-						log.Printf("Closed stale PR #%d for branch %s", *pr.Number, branchName)
-					}
+		// Branch exists but is stale (behind main) - close any open PRs, delete and recreate
+		log.Printf("Branch %s exists but is stale, closing PRs and recreating", branchName)
+
+		// Find and close any open PRs for this branch before deleting it
+		<-c.apiTicker.C
+		prs, _, err := c.ghClient.PullRequests.List(ctx, c.owner, c.repo, &github.PullRequestListOptions{
+			Head:  c.headFilter(branchName),
+			State: "open",
+		})
+		if err != nil {
+			log.Printf("warning: failed to list PRs for branch %s: %v", branchName, err)
+		} else {
+			for _, pr := range filterPRsByHeadRef(prs, branchName) {
+				<-c.apiTicker.C
+				_, _, err := c.ghClient.PullRequests.Edit(ctx, c.owner, c.repo, *pr.Number, &github.PullRequest{
+					State: github.String("closed"),
+				})
+				if err != nil {
+					log.Printf("warning: failed to close PR #%d: %v", *pr.Number, err)
+				} else {
+					log.Printf("Closed stale PR #%d for branch %s", *pr.Number, branchName)
 				}
 			}
-
-			_, err = c.ghClient.Git.DeleteRef(ctx, c.owner, c.repo, ref)
-			if err != nil {
-				return nil, fmt.Errorf("branch %s is stale but cannot be deleted: %w", branchName, err)
-			}
-
-			// Create fresh branch
-			_, _, err = c.ghClient.Git.CreateRef(ctx, c.owner, c.repo, &github.Reference{
-				Ref:    github.String(ref),
-				Object: mainRef.Object,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to recreate branch %s: %w", branchName, err)
-			}
 		}
+
+		_, err = c.ghClient.Git.DeleteRef(ctx, c.owner, c.repo, ref)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("branch %s is stale but cannot be deleted: %w", branchName, err)
+		}
+
+		// Create fresh branch
+		err = c.createRefRetryingOnExisting(ctx, ref, mainRef.Object)
+		if err != nil {
+			return nil, fmt.Errorf("failed to recreate branch %s: %w", branchName, err)
 		}
 	}
 
@@ -234,7 +280,7 @@ func (c *BranchClient) PullRequest(ctx context.Context, title, body string) (*gi
 
 	// Check if a PR already exists for this branch
 	prs, _, err := c.client.ghClient.PullRequests.List(ctx, c.client.owner, c.client.repo, &github.PullRequestListOptions{
-		Head:  c.branchName,
+		Head:  c.client.headFilter(c.branchName),
 		State: "open",
 	})
 	if err != nil {
@@ -242,6 +288,7 @@ func (c *BranchClient) PullRequest(ctx context.Context, title, body string) (*gi
 	}
 
 	// If an open PR exists for this branch, return it
+	prs = filterPRsByHeadRef(prs, c.branchName)
 	if len(prs) > 0 {
 		log.Printf("PR #%d already exists for branch %s, reusing it", *prs[0].Number, c.branchName)
 		return prs[0], nil
@@ -279,7 +326,10 @@ func (c *BranchClient) WaitAndMerge(ctx context.Context, pr *github.PullRequest)
 
 	<-c.client.apiTicker.C
 
-	_, _, err = c.client.ghClient.PullRequests.Merge(ctx, c.client.owner, c.client.repo, *pr.Number, "", nil)
+	_, _, err = c.client.ghClient.PullRequests.Merge(ctx, c.client.owner, c.client.repo, *pr.Number, "", &github.PullRequestOptions{
+		// The blog repo rejects merge commits, so always squash.
+		MergeMethod: "squash",
+	})
 	if err != nil {
 		return err
 	}
