@@ -25,12 +25,13 @@ comment = {{.Comment | quote}}
 
 ### My thoughts
 
-{{.Comment}}
+{{.Comment | markdownize}}
 
 Read the article: [{{.Title}}]({{.URL}})
 `
 	tmpl = template.Must(template.New("short").Funcs(template.FuncMap{
-		"quote": strconv.Quote,
+		"markdownize": MarkdownizeComment,
+		"quote":       strconv.Quote,
 		"timeFormat": func(t time.Time) string {
 			return t.Format(time.RFC3339Nano)
 		},
