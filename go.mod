@@ -3,7 +3,7 @@ module github.com/seriousben/positronic-blogger
 go 1.25.0
 
 require (
-	github.com/bwmarrin/discordgo v0.28.1
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.14.0
